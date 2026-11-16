@@ -46,13 +46,12 @@ if [ -n "${GITHUB_TOKEN:-}" ]; then
 fi
 
 echo "[*] Staging core files, benchmarks, and model checkpoints..."
-# Explicitly stage code, docs, and trained weights
+# Explicitly stage code, docs, modules, and trained weights
 git add .gitignore
-git add -- *.py 2>/dev/null || true
-git add -- *.sh 2>/dev/null || true
-git add -- *.md 2>/dev/null || true
-git add -- Dockerfile* 2>/dev/null || true
-git add -f -- *.zip 2>/dev/null || true
+git add -A -- '*.py' '*.sh' '*.md' 'Dockerfile*' 2>/dev/null || true
+git add -A gex_rl mex_rl arena 2>/dev/null || true
+git add -f -- '*.zip' 2>/dev/null || true
+git add -f -- gex_rl/*.zip mex_rl/*.zip arena/*.zip 2>/dev/null || true
 
 # Extract winning metrics from BENCHMARK.md if available
 METRICS_INFO="v3 DAG env + MaskablePPO best model"

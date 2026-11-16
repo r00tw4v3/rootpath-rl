@@ -1,99 +1,80 @@
-# RootPath RL: Autonomous Linux Privilege Escalation & Multi-WAN Systems
+# RootPath RL: Three-Module Autonomous Ecosystem
 
-A high-performance Reinforcement Learning research & engineering pipeline for autonomous Linux Privilege Escalation planning and resilient Multi-WAN network aggregation.
+A high-performance Reinforcement Learning architecture for autonomous Linux state-machine exploration, hierarchical strategic planning, and adversarial sparring.
 
 ---
 
-## Architecture Overview
+## Ecosystem Architecture
 
 ```
                                       +------------------------------------+
-                                      |   LinuxPrivEscEnvV3 (Gymnasium)    |
+                                      |       RootPath RL Ecosystem        |
                                       +------------------------------------+
                                                         |
-                    +-----------------------------------+-----------------------------------+
-                    |                                                                       |
-       +-------------------------+                                             +-------------------------+
-       |   DAG Dependency Graph  |                                             |   sb3-contrib Masking   |
-       +-------------------------+                                             +-------------------------+
-       |  enum_users  config_leak|                                             | - No duplicate checks   |
-       |       \          /      |                                             | - Prereqs enforced      |
-       |      service_write      |                                             | - Valid exploits only   |
-       |  path_hijack  passwd... |                                             +-------------------------+
-       +-------------------------+
-                    |
-                    v
-       +-------------------------+
-       | MaskablePPO (Winner Mlp)|
-       +-------------------------+
-       | 100% Success Rate       |
-       | 7.22 Mean Steps to Root |
-       +-------------------------+
+         +----------------------------------------------+----------------------------------------------+
+         |                                              |                                              |
++----------------------------------+          +----------------------------------+          +----------------------------------+
+|      GEx-RL (Tactical Fast)      |          |    MEx-RL (Strategic Manager)    |          |    Adversarial Arena (Sparring)  |
++----------------------------------+          +----------------------------------+          +----------------------------------+
+| - Pure PyTorch CUDA Tensors      |          | - POMDP Multi-Domain Graph       |          | - Plug-and-Play Battleground     |
+| - 4096 Parallel Environments     |          | - 4 Strategic Macro Domains      |          | - Adaptive Hardening Defender    |
+| - 260,450 Steps/Sec (Throughput) |          | - Recurrent LSTM Memory          |          | - FIDE Elo & Telemetry Dashboard |
+| - MaskablePPO Checkpoint         |          | - RecurrentPPO Checkpoint        |          | - Champion Checkpoint Saving     |
++----------------------------------+          +----------------------------------+          +----------------------------------+
 ```
 
 ---
 
-## 1. Network Resilience & Multi-WAN Bonding (`bond.sh`)
+## 1. Modules Overview
 
-Aggregates multiple WAN connections (`wlan1`, `usb0`, `wlan0`, `eth0`) via Policy-Based Routing (PBR) and multipath `nexthop` routing:
-- **Dynamic Interface Detection:** Automatically discovers IP addresses and default gateways using `ip route` and `nmcli`.
-- **Health Verification:** Verifies live outbound connectivity per interface (`curl -s --interface <dev> --max-time 4 ifconfig.me`) before routing traffic.
-- **Fail-Safe Nexthop:** Dead interfaces are omitted dynamically, preventing packet drops from interrupting training or Git operations.
-- **Isolated Routing Tables:** Maps `usb0` $\to$ `101`, `wlan1` $\to$ `102`, `wlan0` $\to$ `103`, `eth0` $\to$ `104`.
+### 1. `GEx-RL` (`gex_rl/`) — Tactical High-Throughput Exploration
+- **Environment:** `GExGPUEnv` (pure PyTorch CUDA batched tensor state-machine with 4,096 parallel envs) and `GExGymEnv` (Gymnasium wrapper).
+- **Policy:** `MaskablePPO` (`MlpPolicy`, `net_arch=[128, 128]`).
+- **Throughput:** **260,450 SPS** on NVIDIA GeForce RTX 5050 Laptop GPU.
+- **Artifact:** `gex_rl/gex_policy_best.zip`.
 
-**Usage:**
-```bash
-sudo bash bond.sh
-```
+### 2. `MEx-RL` (`mex_rl/`) — Strategic Hierarchical Manager
+- **Environment:** `MExGymEnv` — 16-node POMDP multi-domain graph spanning `FilePermissions`, `ServiceDaemons`, `ScheduledTasks`, and `IdentityGroups` with sequential unlock dependencies and noisy telemetry.
+- **Policy:** `RecurrentPPO` (`MlpLstmPolicy`, `lstm_hidden_size=128`) maintaining temporal memory across sequential steps to command domain macro-actions.
+- **Throughput:** **109,011 SPS** on GPU.
+- **Artifact:** `mex_rl/mex_manager_best.zip`.
 
----
-
-## 2. Environment Evolution
-
-| Feature | V1 (`env.py`) | V2 (`env_v2.py`) | V3 (`env_v3.py`) |
-|:---|:---:|:---:|:---:|
-| **Categories / Nodes** | 3 (suid, sudo, cron) | 8 categories | **10 DAG Nodes** (2 Recon + 8 Vulns) |
-| **Observation Space** | `Box(7,)` | `Box(17,)` | **`Box(21,)`** |
-| **Action Space** | `Discrete(6)` | `Discrete(16)` | **`Discrete(18)`** |
-| **Prerequisites (DAG)**| None (flat) | None (flat) | **Multi-step DAG Dependencies** |
-| **Action Masking** | None | None | **Full `sb3-contrib` Action Masking** |
-| **Reward Shaping** | Fixed | Fixed | **Configurable Parameters** in `__init__` |
-
-### DAG Dependencies in V3:
-- `path_hijack` $\leftarrow$ `enum_users`
-- `passwd_write` $\leftarrow$ `config_leak`
-- `service_write` $\leftarrow$ `enum_users` + `config_leak`
-- Standalone vectors (`suid`, `sudo`, `cron`, `capabilities`, `docker_group`) can be investigated directly.
+### 3. `Adversarial Arena` (`arena/`) — Plug-and-Play Competitive Gym
+- **Environment:** `CombatArenaEnv` — Vectorized competitive battleground featuring an evolving **Defender Policy** allocating obfuscation and decoys under a strict availability constraint (`availability >= 0.85`).
+- **Sparring Launcher:** `arena/sparring_gym.py` supporting `--agent [gex|mex]`, `--max-rounds`, `--target-score`, and `--time-limit`.
+- **Live Telemetry:** Tracks round-by-round win rates, step counts, scores, and FIDE Elo ratings, automatically exporting battle-hardened champion checkpoints (`arena/<agent>_arena_champion.zip`).
 
 ---
 
-## 3. Autotuning & Benchmarks (`autotune_v3.py`)
+## 2. Competitive Sparring Benchmark (200 Episodes)
 
-Trained with `MaskablePPO("MlpPolicy", device="cpu")` over 100,000 steps across varying step penalties and hyperparameter schedules. Evaluated over 100 randomized test episodes.
-
-| Candidate | Step Penalty | LR | Ent Coef | Success Rate | Mean Ep Length | Mean Reward |
-|:---|:---:|:---:|:---:|:---:|:---:|:---:|
-| `CANDIDATE_1` | `-0.5` | `3e-4` | `0.01` | 100.0% | 8.57 | 85.22 |
-| `CANDIDATE_2` | `-1.5` | `3e-4` | `0.005` | 100.0% | 8.45 | 76.31 |
-| **`CANDIDATE_3` (BEST)** | **`-3.0`** | **`5e-4`** | **`0.001`** | **100.0%** | **7.22** | **65.95** |
-| `CANDIDATE_4` | `-1.5` | `7e-4` | `0.01` | 100.0% | 8.77 | 91.50 |
-
-The winning model (`CANDIDATE_3`) achieves **100% exploit success** with an optimal mean episode length of **7.22 steps**, saved as `privesc_maskable_ppo_best.zip`.
+| Agent Ecosystem | Model Architecture | Training Throughput | Sparring Win Rate | Mean Steps | Mean Cumulative Score |
+|:---|:---:|:---:|:---:|:---:|:---:|
+| **GEx-RL (Baseline)** | `Tactical MLP (CUDA Vec)` | `260,450 SPS` | **85.5%** | **10.52** | 59.82 |
+| **GEx-RL (Arena Champion)** | `Tactical MLP (CUDA Vec)` | `260,450 SPS` | **85.5%** | **10.52** | 59.82 |
+| **MEx-RL (Manager Best)** | `Strategic Recurrent LSTM` | `109,011 SPS` | **79.5%** | **11.80** | 115.61 |
+| **MEx-RL (Arena Champion)** | `Strategic Recurrent LSTM` | `109,011 SPS` | **79.5%** | **11.80** | 115.61 |
 
 ---
 
-## 4. Quickstart & Verification
+## 3. Quickstart & Execution
 
 ```bash
 # 1. Activate environment
 source venv/bin/activate
 
-# 2. Run deterministic evaluation with the optimal model
-python3 test_best_model.py
+# 2. Train Tactical GEx-RL (2,000,000 steps on GPU)
+python3 gex_rl/train_gex.py
 
-# 3. Run automated autotuning benchmark sweep
-python3 autotune_v3.py
+# 3. Train Strategic MEx-RL (Recurrent LSTM Manager)
+python3 mex_rl/train_mex.py
 
-# 4. Sync repository to GitHub
+# 4. Launch Adversarial Arena Sparring
+python3 arena/sparring_gym.py --agent mex --max-rounds 200 --target-score 85.0
+
+# 5. Run Full Benchmark Across 200 Scenarios
+python3 benchmark_all.py
+
+# 6. Synchronize to GitHub
 bash sync_github.sh
 ```
