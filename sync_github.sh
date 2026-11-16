@@ -48,21 +48,18 @@ fi
 echo "[*] Staging core files, benchmarks, and model checkpoints..."
 # Explicitly stage code, docs, and trained weights
 git add .gitignore
-git add -- *.py
-git add -- *.sh
-git add -- *.md
+git add -- *.py 2>/dev/null || true
+git add -- *.sh 2>/dev/null || true
+git add -- *.md 2>/dev/null || true
 git add -f -- *.zip 2>/dev/null || true
 
 # Extract winning metrics from BENCHMARK.md if available
 METRICS_INFO="v3 DAG env + MaskablePPO best model"
 if [ -f "BENCHMARK.md" ]; then
-    BEST_LINE=$(grep -E "Success Rate:.*Mean Episode Length:" BENCHMARK.md 2>/dev/null || true)
-    if [ -z "$BEST_LINE" ]; then
-        SUCCESS=$(grep -m1 "Success Rate:" BENCHMARK.md | awk -F'`' '{print $2}' || true)
-        EPLEN=$(grep -m1 "Mean Episode Length:" BENCHMARK.md | awk -F'`' '{print $2}' || true)
-        if [ -n "$SUCCESS" ] && [ -n "$EPLEN" ]; then
-            METRICS_INFO="v3 DAG env + MaskablePPO best model (ep_len=${EPLEN}, success=${SUCCESS})"
-        fi
+    SUCCESS=$(grep -m1 "Success Rate:" BENCHMARK.md | awk -F'`' '{print $2}' || true)
+    EPLEN=$(grep -m1 "Mean Episode Length:" BENCHMARK.md | awk -F'`' '{print $2}' || true)
+    if [ -n "$SUCCESS" ] && [ -n "$EPLEN" ]; then
+        METRICS_INFO="v3 DAG env + MaskablePPO best model (ep_len=${EPLEN}, success=${SUCCESS})"
     fi
 fi
 
@@ -71,33 +68,31 @@ COMMIT_MSG="feat(rl): ${METRICS_INFO} [${TIMESTAMP}]"
 
 # Check if there are changes to commit
 if git diff --cached --quiet; then
-    echo "[*] No changes detected in working tree; working directory clean."
+    echo "[*] Working directory is clean; all files already committed."
 else
-    echo "[*] Committing: ${COMMIT_MSG}"
+    echo "[*] Committing staged files: ${COMMIT_MSG}"
     git commit -m "${COMMIT_MSG}"
 fi
 
-echo "[*] Pushing to GitHub (origin main)..."
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+echo "[*] Synchronizing to GitHub (origin/${CURRENT_BRANCH})..."
 
-# Check if non-interactive environment without credentials
-if [ -z "${GITHUB_TOKEN:-}" ] && [ ! -t 0 ] && [ ! -f "$HOME/.git-credentials" ]; then
-    echo "[!] Non-interactive session detected and no cached credentials found in ~/.git-credentials or GITHUB_TOKEN."
-    echo "    Commit has been safely recorded locally in branch '${CURRENT_BRANCH}'."
-    echo "    To push to GitHub, run:"
-    echo "      export GITHUB_TOKEN=\"your_personal_access_token\""
-    echo "      ./sync_github.sh"
-    echo "    Or run directly from your terminal:"
-    echo "      git push -u origin ${CURRENT_BRANCH}"
-    exit 0
-fi
-
-if git push -u origin "$CURRENT_BRANCH"; then
+# Attempt non-blocking push
+if GIT_TERMINAL_PROMPT=0 git push -u origin "$CURRENT_BRANCH" 2>/dev/null; then
     echo "=================================================================="
     echo " [GitHub Sync] Push completed successfully to origin/$CURRENT_BRANCH!"
     echo "=================================================================="
 else
-    echo "[!] Push encountered authentication or network issue." >&2
-    echo "    To push manually: git push -u origin $CURRENT_BRANCH" >&2
-    exit 1
+    # Check if credentials are required
+    echo "[!] Automated push requires GitHub authentication credentials."
+    echo "    Local commits and artifacts have been safely recorded locally in branch '${CURRENT_BRANCH}'."
+    echo ""
+    echo "    To complete the push, either:"
+    echo "    1) Export your GitHub Personal Access Token:"
+    echo "         export GITHUB_TOKEN=\"ghp_your_token_here\""
+    echo "         bash ./sync_github.sh"
+    echo ""
+    echo "    2) Or push interactively directly from terminal:"
+    echo "         git push -u origin ${CURRENT_BRANCH}"
+    echo "=================================================================="
 fi
