@@ -1,0 +1,20 @@
+# Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# TensorBoard & Experiment Logs
+runs/
+tb_logs/
+*.log
+
+# System & OS Files
+.DS_Store
+Thumbs.db
