@@ -51,6 +51,7 @@ git add .gitignore
 git add -- *.py 2>/dev/null || true
 git add -- *.sh 2>/dev/null || true
 git add -- *.md 2>/dev/null || true
+git add -- Dockerfile* 2>/dev/null || true
 git add -f -- *.zip 2>/dev/null || true
 
 # Extract winning metrics from BENCHMARK.md if available

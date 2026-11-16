@@ -1,0 +1,45 @@
+FROM debian:bookworm-slim
+
+# Install standard auditing & system administration tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    sudo \
+    cron \
+    libcap2-bin \
+    procps \
+    coreutils \
+    findutils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create isolated unprivileged audit user
+RUN useradd -m -s /bin/bash audituser && \
+    usermod -aG sudo audituser
+
+# Configure simulated benign test vectors for security audit verification:
+# 1. SUID target
+RUN cp /bin/sleep /opt/audit_suid_task && \
+    chmod 4755 /opt/audit_suid_task
+
+# 2. Sudo NOPASSWD entry
+RUN echo "audituser ALL=(ALL) NOPASSWD: /usr/bin/find" > /etc/sudoers.d/audituser && \
+    chmod 0440 /etc/sudoers.d/audituser
+
+# 3. Simulated cron job with writable script
+RUN touch /tmp/scheduled_audit.sh && \
+    chmod 777 /tmp/scheduled_audit.sh && \
+    echo "* * * * * root /tmp/scheduled_audit.sh" > /etc/cron.d/audit_cron && \
+    chmod 0644 /etc/cron.d/audit_cron
+
+# 4. Simulated file capabilities
+RUN cp /bin/date /opt/audit_cap_task && \
+    setcap cap_setuid+ep /opt/audit_cap_task 2>/dev/null || true
+
+# 5. Configuration leak artifact
+RUN mkdir -p /var/log/audit_leaks && \
+    echo "SERVICE_TOKEN=mock_synthetic_token_98765" > /var/log/audit_leaks/config.backup && \
+    chmod 644 /var/log/audit_leaks/config.backup
+
+# Set default working dir and user
+WORKDIR /home/audituser
+USER audituser
+
+CMD ["/bin/bash"]
