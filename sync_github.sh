@@ -79,12 +79,25 @@ fi
 
 echo "[*] Pushing to GitHub (origin main)..."
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+# Check if non-interactive environment without credentials
+if [ -z "${GITHUB_TOKEN:-}" ] && [ ! -t 0 ] && [ ! -f "$HOME/.git-credentials" ]; then
+    echo "[!] Non-interactive session detected and no cached credentials found in ~/.git-credentials or GITHUB_TOKEN."
+    echo "    Commit has been safely recorded locally in branch '${CURRENT_BRANCH}'."
+    echo "    To push to GitHub, run:"
+    echo "      export GITHUB_TOKEN=\"your_personal_access_token\""
+    echo "      ./sync_github.sh"
+    echo "    Or run directly from your terminal:"
+    echo "      git push -u origin ${CURRENT_BRANCH}"
+    exit 0
+fi
+
 if git push -u origin "$CURRENT_BRANCH"; then
     echo "=================================================================="
     echo " [GitHub Sync] Push completed successfully to origin/$CURRENT_BRANCH!"
     echo "=================================================================="
 else
-    echo "[!] Push encountered authentication or network lock." >&2
-    echo "    To push manually: git push -u origin main" >&2
+    echo "[!] Push encountered authentication or network issue." >&2
+    echo "    To push manually: git push -u origin $CURRENT_BRANCH" >&2
     exit 1
 fi
