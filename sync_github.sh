@@ -49,17 +49,17 @@ echo "[*] Staging core files, benchmarks, and model checkpoints..."
 # Explicitly stage code, docs, modules, and trained weights
 git add .gitignore
 git add -A -- '*.py' '*.sh' '*.md' 'Dockerfile*' 2>/dev/null || true
-git add -A gex_rl mex_rl arena 2>/dev/null || true
-git add -f -- *.zip gex_rl/*.zip mex_rl/*.zip arena/*.zip 2>/dev/null || true
+git add -A gex_rl mex_rl arena rex_rl 2>/dev/null || true
+git add -f -- *.zip gex_rl/*.zip mex_rl/*.zip arena/*.zip rex_rl/*.zip 2>/dev/null || true
 git reset venv/ 2>/dev/null || true
 
 # Extract winning metrics from BENCHMARK.md if available
-METRICS_INFO="v3 DAG env + MaskablePPO best model"
+METRICS_INFO="Phase V6 full-chain REx+MEx+GEx pipeline + Adversarial Arena"
 if [ -f "BENCHMARK.md" ]; then
-    SUCCESS=$(grep -m1 "Success Rate:" BENCHMARK.md | awk -F'`' '{print $2}' || true)
-    EPLEN=$(grep -m1 "Mean Episode Length:" BENCHMARK.md | awk -F'`' '{print $2}' || true)
+    SUCCESS=$(grep -m1 "FULL-CHAIN SUCCESS RATE:" BENCHMARK.md | awk -F'`' '{print $2}' || true)
+    EPLEN=$(grep -m1 "Mean Total Pipeline Steps:" BENCHMARK.md | awk -F'`' '{print $2}' || true)
     if [ -n "$SUCCESS" ] && [ -n "$EPLEN" ]; then
-        METRICS_INFO="v3 DAG env + MaskablePPO best model (ep_len=${EPLEN}, success=${SUCCESS})"
+        METRICS_INFO="Phase V6 full-chain pipeline (success=${SUCCESS}, steps=${EPLEN})"
     fi
 fi
 

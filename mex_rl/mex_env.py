@@ -1,7 +1,7 @@
 """
 ==============================================================================
-MEx-RL Environment: Manager-Guided Strategic POMDP Multi-Domain Simulator
-Hierarchical Two-Tier POMDP with Domain Macro-Actions and Recurrent Memory.
+MEx-RL Environment: Upgraded Strategic POMDP with REx-RL Context Handoff
+46-dim Observation Vector (42 graph dims + 4 REx context dims), Recurrent LSTM.
 ==============================================================================
 """
 
@@ -35,18 +35,19 @@ NODE_NAMES: List[str] = (
 )
 N_NODES = len(NODE_NAMES)  # 16
 N_ACTIONS = N_DOMAINS      # 4 macro-actions
-OBS_DIM = 2 * N_NODES + N_DOMAINS + N_DOMAINS + 1 + 1  # 42 dims
+CONTEXT_DIM = 4            # [entry_service_type, anomaly_confidence, noise_level, privilege_tier]
+OBS_DIM = 2 * N_NODES + N_DOMAINS + N_DOMAINS + 1 + 1 + CONTEXT_DIM  # 46 dims
 
 
 class MExGymEnv(gym.Env):
-    """Hierarchical Strategic POMDP Environment for MEx-RL Manager."""
+    """Hierarchical Strategic POMDP Environment accepting REx-RL Context Handoff."""
 
     metadata = {"render_modes": ["human"]}
 
     def __init__(
         self,
         step_penalty: float = -0.5,
-        probe_reward: float = 5.0,
+        probe_reward: float = 6.0,
         unlock_reward: float = 15.0,
         resolve_reward: float = 20.0,
         completion_reward: float = 60.0,
@@ -71,27 +72,46 @@ class MExGymEnv(gym.Env):
         self.real_vulns: Set[int] = set()
         self.unlocked_domains: Set[int] = set()
         self.resolved_domains: Set[int] = set()
+        self.target_d = 1
         self.steps = 0
+        self.context_vector = np.zeros(CONTEXT_DIM, dtype=np.float32)
 
     def reset(
-        self, seed: Optional[int] = None, options: Optional[dict] = None
+        self,
+        seed: Optional[int] = None,
+        options: Optional[dict] = None,
+        context_vector: Optional[np.ndarray] = None,
     ) -> Tuple[np.ndarray, dict]:
         super().reset(seed=seed)
         if seed is not None:
             random.seed(seed)
             np.random.seed(seed)
 
-        # Ensure multi-domain challenge: 1 vuln in Domain 0, 1 vuln in Domain 1 (or 2)
-        d0_v = random.randint(0, 3)
-        d1_v = random.randint(4, 7) if random.random() < 0.8 else random.randint(8, 11)
-        self.real_vulns = {d0_v, d1_v}
+        # Context vector from REx-RL handoff or options
+        if context_vector is not None:
+            self.context_vector = np.clip(np.array(context_vector, dtype=np.float32), 0.0, 1.0)
+        elif options and "context_vector" in options:
+            self.context_vector = np.clip(np.array(options["context_vector"], dtype=np.float32), 0.0, 1.0)
+        else:
+            suggested = random.choice([1, 2])
+            entry_type = suggested / 3.0
+            self.context_vector = np.array([entry_type, 0.85, 0.05, 0.33], dtype=np.float32)
+
+        # Identify target domain suggested by REx entry context (1 or 2)
+        target_cand = int(round(float(self.context_vector[0]) * 3.0))
+        self.target_d = target_cand if target_cand in [1, 2] else random.choice([1, 2])
+
+        # Populate a solvable sequential chain from domain 0 up to target_d
+        self.real_vulns = set()
+        for d in range(self.target_d + 1):
+            self.real_vulns.add(random.randint(d * 4, d * 4 + 3))
 
         self.unlocked_domains = {0}
         self.resolved_domains = set()
         self.steps = 0
 
         self.state = np.zeros(OBS_DIM, dtype=np.float32)
-        # Domain 0 unlocked
+        # Domain 0 unlocked flag
         self.state[32] = 1.0
 
         # Noisy domain telemetry: dims [36..39]
@@ -101,7 +121,10 @@ class MExGymEnv(gym.Env):
             noisy_val = np.clip((count / 4.0) + np.random.normal(0, self.noise_std), 0.0, 1.0)
             self.state[36 + d] = float(noisy_val)
 
-        return self.state.copy(), {}
+        # REx-RL Context vector: dims [42..45]
+        self.state[42:46] = self.context_vector
+
+        return self.state.copy(), {"context_vector": self.context_vector}
 
     def step(self, action: int) -> Tuple[np.ndarray, float, bool, bool, dict]:
         self.steps += 1
@@ -111,14 +134,11 @@ class MExGymEnv(gym.Env):
         d = int(action)
 
         if d not in self.unlocked_domains:
-            # Domain locked
             reward += -3.0
         elif d in self.resolved_domains:
-            # Domain already cleared
             reward += -2.0
         else:
             domain_nodes = list(range(d * 4, (d + 1) * 4))
-            # Check if there is an observed vulnerability ready to resolve
             ready = [n for n in domain_nodes if self.state[2 * n] == 1.0 and self.state[2 * n + 1] == 1.0]
 
             if ready:
@@ -128,19 +148,19 @@ class MExGymEnv(gym.Env):
                 self.resolved_domains.add(d)
                 reward += self.resolve_reward
 
-                # Unlock next domain
+                # Sequential unlock
                 next_d = d + 1
                 if next_d < N_DOMAINS and next_d not in self.unlocked_domains:
                     self.unlocked_domains.add(next_d)
                     self.state[32 + next_d] = 1.0
                     reward += self.unlock_reward
 
-                if len(self.resolved_domains) >= 2 and len(self.real_vulns) == 0:
+                # Multi-domain chain compromise achieved once target_d is resolved
+                if self.target_d in self.resolved_domains:
                     reward += self.completion_reward
                     self.state[41] = 1.0
                     terminated = True
             else:
-                # Probe unprobed nodes in this domain
                 unprobed = [n for n in domain_nodes if self.state[2 * n] == 0.0]
                 if unprobed:
                     target = unprobed[0]
@@ -156,4 +176,4 @@ class MExGymEnv(gym.Env):
         if self.steps >= self.max_steps:
             truncated = True
 
-        return self.state.copy(), reward, terminated, truncated, {}
+        return self.state.copy(), reward, terminated, truncated, {"won": bool(self.state[41] == 1.0)}

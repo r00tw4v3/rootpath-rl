@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 ==============================================================================
-MEx-RL Trainer: Manager-Guided Strategic RL (Hierarchical + Recurrent LSTM)
-Trains RecurrentPPO (MlpLstmPolicy, lstm_hidden_size=128) over POMDP graph.
+MEx-RL Trainer: Upgraded Strategic Manager with REx Context Handoff
+Trains RecurrentPPO (MlpLstmPolicy, lstm_hidden_size=128) over 46-dim state.
 Exports optimal checkpoint: mex_rl/mex_manager_best.zip
 ==============================================================================
 """
@@ -24,7 +24,7 @@ def make_env():
     return MExGymEnv()
 
 
-def train_mex(total_timesteps: int = 100_000) -> float:
+def train_mex(total_timesteps: int = 80_000) -> float:
     output_dir = os.path.dirname(os.path.abspath(__file__))
     checkpoint_path = os.path.join(output_dir, "mex_manager_best")
 
@@ -32,10 +32,10 @@ def train_mex(total_timesteps: int = 100_000) -> float:
     n_envs = 32
 
     print("==================================================================")
-    print(" [MEx-RL Trainer] Starting Strategic Recurrent Manager Engine")
+    print(" [MEx-RL Trainer] Training Upgraded Context-Aware Strategic Manager")
     print(f" Device: {device} ({torch.cuda.get_device_name(0) if device == 'cuda' else 'CPU'})")
     print(f" Parallel Envs: {n_envs} | Target Timesteps: {total_timesteps:,}")
-    print(" Architecture: RecurrentPPO (MlpLstmPolicy, lstm_hidden_size=128)")
+    print(" Observation Dim: 46 (42 POMDP + 4 REx Handoff Context)")
     print("==================================================================")
 
     vec_env = make_vec_env(make_env, n_envs=n_envs)
@@ -76,7 +76,7 @@ def train_mex(total_timesteps: int = 100_000) -> float:
     print(f"[+] Total Training Time: {train_time:.1f}s ({final_sps:,.0f} SPS)")
 
     # 100-Episode Validation
-    print("\n[*] Evaluating MEx-RL Manager over 100 randomized test episodes...")
+    print("\n[*] Evaluating Upgraded MEx-RL Manager over 100 randomized test episodes...")
     eval_env = MExGymEnv()
     successes = 0
     ep_lengths = []
@@ -97,13 +97,13 @@ def train_mex(total_timesteps: int = 100_000) -> float:
                 episode_start=episode_starts,
                 deterministic=True,
             )
-            obs, r, term, trunc, _ = eval_env.step(int(act))
+            obs, r, term, trunc, info = eval_env.step(int(act))
             steps += 1
             ep_rew += r
             done = term or trunc
             episode_starts = np.zeros((1,), dtype=bool)
 
-        if obs[41] == 1.0:
+        if info.get("won", False):
             successes += 1
         ep_lengths.append(steps)
         rewards.append(ep_rew)

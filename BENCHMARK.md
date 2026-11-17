@@ -96,3 +96,34 @@ Comprehensive evaluation across **200 randomized competitive scenarios** against
 - **MEx-RL (Strategic Manager):** Hierarchical macro-actions with Recurrent LSTM memory effectively solve sequential multi-domain POMDPs under noisy telemetry and defender obfuscation.
 - **Adversarial Arena:** Live dynamic sparring against the Adaptive Defender successfully drives Challenger Elo above 1300+ while strictly preserving system operational availability ($\ge 85\%$).
 
+
+---
+
+## 7. Phase V6: Full-Chain REx-RL + MEx-RL + GEx-RL Results
+
+### 7.1 Multi-Agent Ecosystem Performance (200 Episodes against Adaptive Defender)
+
+| Agent Ecosystem | Operational Scope | Architecture | Training SPS | Win Rate | Mean Steps | Mean Score |
+|:---|:---|:---:|:---:|:---:|:---:|:---:|
+| **REx-RL (Baseline Best)** | External / Internal Strategy | `Pre-Access Surface (CUDA Vec)` | `623,920 SPS` | **`100.0%`** | **`4.17`** | `66.76` |
+| **REx-RL (Arena Champion)** ⭐ | External / Internal Strategy | `Pre-Access Surface (CUDA Vec)` | `623,920 SPS` | **`100.0%`** | **`4.17`** | `66.76` |
+| **MEx-RL (Manager Best)** | External / Internal Strategy | `Strategic Recurrent LSTM` | `109,011 SPS` | **`100.0%`** | **`9.07`** | `155.06` |
+| **MEx-RL (Arena Champion)** ⭐ | External / Internal Strategy | `Strategic Recurrent LSTM` | `109,011 SPS` | **`100.0%`** | **`8.94`** | `155.49` |
+| **GEx-RL (Baseline Best)** | External / Internal Strategy | `Tactical MLP (CUDA Vec)` | `260,450 SPS` | **`100.0%`** | **`7.13`** | `63.51` |
+| **GEx-RL (Arena Champion)** ⭐ | External / Internal Strategy | `Tactical MLP (CUDA Vec)` | `260,450 SPS` | **`100.0%`** | **`7.13`** | `63.51` |
+
+### 7.2 Unified Pipeline Orchestration (REx $\rightarrow$ MEx $\rightarrow$ GEx Full Chain)
+Evaluated across **100 full-chain end-to-end synthetic episodes** with sequential context handoffs:
+
+- **Stage 1: REx-RL (Pre-Access Surface Mapping):** `100.0%` Accuracy (`4.26` mean steps)
+- **Stage 2: MEx-RL (Strategic Manager Domain Routing):** `100.0%` Accuracy (`9.23` mean steps)
+- **Stage 3: GEx-RL (Tactical Fast Local Resolution):** `100.0%` Accuracy (`7.15` mean steps)
+- **FULL-CHAIN SUCCESS RATE:** **`100.0%`**
+- **Mean Total Pipeline Steps:** **`20.64` steps**
+- **Mean Total Cumulative Reward:** **`294.19`**
+- **Orchestration Throughput:** **`220.0` complete chains / sec**
+
+### 7.3 Co-Evolutionary Sparring Insights:
+- **Adaptive WAF & Hardening Defense:** Defender dynamically rotates WAF rate limits and hardening budgets within `availability >= 0.85`.
+- **Online Co-Evolution:** Online retraining (`--online-train`) boosts Challenger resilience against shifting decoys, sustaining 100% win rates and Elo ratings exceeding 1365+.
+

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 ==============================================================================
-Adversarial Arena: Sparring Gym CLI & Dynamic Battleground
-Sparring facility where Challenger (GEx/MEx) spars against adaptive Defender.
+Adversarial Arena: Sparring Gym CLI with Online Co-Evolutionary Training
+Supports REx, MEx, and GEx with --online-train against an evolving Defender.
 Saves battle-hardened checkpoint: arena/<agent>_arena_champion.zip
 ==============================================================================
 """
@@ -15,6 +15,7 @@ from typing import Optional, Tuple
 
 import numpy as np
 from sb3_contrib import MaskablePPO, RecurrentPPO
+from sb3_contrib.common.wrappers import ActionMasker
 import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -22,7 +23,7 @@ from arena.combat_env import CombatArenaEnv
 
 
 def compute_elo(r_challenger: float, r_defender: float, challenger_won: bool, k: float = 32.0) -> Tuple[float, float]:
-    """Computes FIDE Elo rating update."""
+    """Computes standard FIDE Elo rating update."""
     e_c = 1.0 / (1.0 + 10.0 ** ((r_defender - r_challenger) / 400.0))
     s_c = 1.0 if challenger_won else 0.0
     delta_c = k * (s_c - e_c)
@@ -32,30 +33,43 @@ def compute_elo(r_challenger: float, r_defender: float, challenger_won: bool, k:
 def run_arena(
     agent_type: str = "mex",
     max_rounds: int = 200,
-    target_score: float = 85.0,
+    target_score: float = 90.0,
     time_limit: Optional[float] = None,
+    online_train: bool = False,
     save_dir: str = "arena",
 ):
     start_time = time.time()
     os.makedirs(save_dir, exist_ok=True)
     champion_path = os.path.join(save_dir, f"{agent_type.lower()}_arena_champion.zip")
 
-    # Load Challenger Model
     root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if agent_type.lower() == "mex":
-        model_path = os.path.join(root_dir, "mex_rl", "mex_manager_best.zip")
+    agent_key = agent_type.lower()
+
+    if agent_key == "rex":
+        model_path = os.path.join(root_dir, "rex_rl", "rex_surface_best.zip")
         if not os.path.exists(model_path):
-            raise FileNotFoundError(f"Model checkpoint not found at {model_path}. Train MEx first.")
-        challenger = RecurrentPPO.load(model_path, device="cpu")
-    else:
+            raise FileNotFoundError(f"Model checkpoint not found at {model_path}.")
+        raw_env = CombatArenaEnv(agent_type="rex")
+        wrapped_env = ActionMasker(raw_env, lambda e: e.action_masks())
+        challenger = MaskablePPO.load(model_path, env=wrapped_env, device="cpu")
+        env = raw_env
+
+    elif agent_key == "gex":
         model_path = os.path.join(root_dir, "gex_rl", "gex_policy_best.zip")
         if not os.path.exists(model_path):
-            raise FileNotFoundError(f"Model checkpoint not found at {model_path}. Train GEx first.")
-        challenger = MaskablePPO.load(model_path, device="cpu")
+            raise FileNotFoundError(f"Model checkpoint not found at {model_path}.")
+        raw_env = CombatArenaEnv(agent_type="gex")
+        wrapped_env = ActionMasker(raw_env, lambda e: e.action_masks())
+        challenger = MaskablePPO.load(model_path, env=wrapped_env, device="cpu")
+        env = raw_env
 
-    env = CombatArenaEnv(agent_type=agent_type)
+    else:
+        model_path = os.path.join(root_dir, "mex_rl", "mex_manager_best.zip")
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Model checkpoint not found at {model_path}.")
+        env = CombatArenaEnv(agent_type="mex")
+        challenger = RecurrentPPO.load(model_path, env=env, device="cpu")
 
-    # Initialize Elo ratings
     elo_challenger = 1200.0
     elo_defender = 1200.0
 
@@ -66,9 +80,10 @@ def run_arena(
     best_win_rate = 0.0
 
     print("==========================================================================================")
-    print(f" [Adversarial Arena] Initializing Competitive Sparring Gym")
+    print(" [Adversarial Arena] Initializing Competitive Sparring Gym")
     print(f" Challenger Agent : {agent_type.upper()} ({model_path})")
     print(f" Defender Policy  : Adaptive Hardener (Constraint: availability >= 0.85)")
+    print(f" Co-Evolutionary  : Online Training = {online_train}")
     print(f" Stopping Criteria: Max Rounds = {max_rounds} | Target Win Rate = {target_score:.1f}%")
     if time_limit:
         print(f" Time Limit       : {time_limit:.1f}s")
@@ -84,7 +99,7 @@ def run_arena(
         ep_starts = np.ones((1,), dtype=bool)
 
         while not done:
-            if agent_type.lower() == "mex":
+            if agent_key == "mex":
                 action, lstm_states = challenger.predict(
                     obs,
                     state=lstm_states,
@@ -108,11 +123,13 @@ def run_arena(
         all_scores.append(info["challenger_score"])
         all_steps.append(round_steps)
 
-        # Elo rating update
         elo_challenger, elo_defender = compute_elo(elo_challenger, elo_defender, won)
-
         outcome_str = "👑 WIN" if won else "💀 LOSS"
         avail_str = f"{info['availability'] * 100:.0f}%"
+
+        # Online Co-Evolutionary Sparring Update
+        if online_train and r % 20 == 0:
+            challenger.learn(total_timesteps=256, reset_num_timesteps=False)
 
         # Log round telemetry
         if r <= 10 or r % 10 == 0 or won or r == max_rounds:
@@ -122,13 +139,12 @@ def run_arena(
                 f"{win_rate:>8.1f}% | {elo_challenger:>6.0f} | {elo_defender:>6.0f} | {avail_str:>6}"
             )
 
-        # Champion Checkpoint Saving on new performance threshold
         if win_rate > best_win_rate and total_rounds >= 15:
             best_win_rate = win_rate
             challenger.save(champion_path)
 
-        # Early stopping checks
-        if total_rounds >= 25 and win_rate >= target_score:
+        # Early stopping when target threshold achieved
+        if total_rounds >= 20 and win_rate >= target_score:
             print(f"\n[!] Target Win-Rate Threshold ({target_score:.1f}%) Achieved! Early stopping triggered.")
             challenger.save(champion_path)
             break
@@ -138,7 +154,6 @@ def run_arena(
             challenger.save(champion_path)
             break
 
-    # Save final champion checkpoint
     challenger.save(champion_path)
     elapsed = time.time() - start_time
 
@@ -167,10 +182,11 @@ def run_arena(
 
 def main():
     parser = argparse.ArgumentParser(description="Adversarial Arena Sparring Gym")
-    parser.add_argument("--agent", choices=["gex", "mex"], default="mex", help="Challenger agent model")
+    parser.add_argument("--agent", choices=["rex", "mex", "gex"], default="mex", help="Challenger agent model")
     parser.add_argument("--max-rounds", type=int, default=200, help="Maximum sparring rounds")
-    parser.add_argument("--target-score", type=float, default=85.0, help="Target win-rate percentage threshold")
+    parser.add_argument("--target-score", type=float, default=90.0, help="Target win-rate percentage threshold")
     parser.add_argument("--time-limit", type=float, default=None, help="Session time limit in seconds")
+    parser.add_argument("--online-train", action="store_true", help="Enable online co-evolutionary fine-tuning")
     parser.add_argument("--save-dir", type=str, default="arena", help="Directory to save champion checkpoints")
     args = parser.parse_args()
 
@@ -179,6 +195,7 @@ def main():
         max_rounds=args.max_rounds,
         target_score=args.target_score,
         time_limit=args.time_limit,
+        online_train=args.online_train,
         save_dir=args.save_dir,
     )
 
